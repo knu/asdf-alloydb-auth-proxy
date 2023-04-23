@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+
+set -eo pipefail
+
+main() {
+  [ "$ASDF_INSTALL_TYPE" = version ] || die "unsupported ASDF_INSTALL_TYPE: $ASDF_INSTALL_TYPE"
+  [ -n "$ASDF_INSTALL_VERSION" ] || die "ASDF_INSTALL_VERSION is required"
+  [ -n "$ASDF_INSTALL_PATH" ] || die "ASDF_INSTALL_PATH is required"
+
+  case "$(uname -sm)" in
+    Darwin\ x86_64)
+      file=alloydb-auth-proxy.darwin.amd64 ;;
+    Darwin\ arm64)
+      file=alloydb-auth-proxy.darwin.arm64 ;;
+    Linux\ x86_64)
+      file=alloydb-auth-proxy.linux.amd64 ;;
+    Linux\ i[36]86)
+      file=alloydb-auth-proxy.linux.386 ;;
+    Linux\ arm64)
+      file=alloydb-auth-proxy.linux.arm64 ;;
+    Linux\ armv[67]l)
+      file=alloydb-auth-proxy.linux.arm ;;
+    *)
+      echo "Unsupported platform" >&2; exit 1
+  esac
+
+  url="https://storage.googleapis.com/alloydb-auth-proxy/v$ASDF_INSTALL_VERSION/$file"
+  prog="$ASDF_INSTALL_PATH/bin/alloydb-auth-proxy"
+
+  mkdir -p "$ASDF_INSTALL_PATH/bin"
+
+  echo "Downloading $url"
+
+  case "$(curl -fsSL -w "%{http_code}" -o "$prog" -C - "$url")" in
+    200) ;;
+    *) die "Download failed"
+  esac
+
+  chmod +x "$prog"
+}
+
+die() {
+  echo "$*"
+  exit 1
+}
+
+main

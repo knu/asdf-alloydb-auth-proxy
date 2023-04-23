@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+
+set -eo pipefail
+
+list_releases () {
+  curl -fsSL \
+       ${GITHUB_API_TOKEN:+-H "Authorization: Bearer $GITHUB_API_TOKEN"} \
+       "https://api.github.com/repos/GoogleCloudPlatform/alloydb-auth-proxy/releases?per_page=100" |
+    awk 'match($0, /"name": "v[^"]*"/) { print substr($0, RSTART+10, RLENGTH-10-1) }'
+}
+
+sort_versions() {
+  sed 'h; s/[+-]/./g; s/.p\([[:digit:]]\)/.z\1/; s/$/.z/; G; s/\n/ /' |
+    LC_ALL=C sort -t. -k 1,1 -k 2,2n -k 3,3n -k 4,4n -k 5,5n | awk '{print $2}'
+}
+
+list_releases | sort_versions | xargs

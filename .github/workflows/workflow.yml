@@ -1,0 +1,25 @@
+name: CI workflow
+
+on:
+  pull_request:
+  push:
+  schedule:
+    - cron: 0 0 * * 1
+
+jobs:
+  plugin-test:
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: asdf-plugin-test
+        uses: asdf-vm/actions/plugin-test@v1
+        with:
+          command: alloydb-auth-proxy --version
+        env:
+          GITHUB_API_TOKEN: ${{ github.token }}
