@@ -1,14 +1,37 @@
-name: CI workflow
+name: CI
 
 on:
   pull_request:
   push:
+    branches: [main]
   schedule:
     - cron: 0 0 * * 1
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check shell scripts
+        run: |
+          shellcheck bin/install bin/list-all
+          bash -n bin/install
+          bash -n bin/list-all
+
   plugin-test:
+    timeout-minutes: 15
     strategy:
+      fail-fast: false
       matrix:
         os:
           - ubuntu-latest
@@ -18,8 +41,24 @@ jobs:
 
     steps:
       - name: asdf-plugin-test
-        uses: asdf-vm/actions/plugin-test@v1
+        uses: asdf-vm/actions/plugin-test@b7bcd026f18772e44fe1026d729e1611cc435d47 # v4.0.1
         with:
           command: alloydb-auth-proxy --version
+          gitref: ${{ github.sha }}
         env:
           GITHUB_API_TOKEN: ${{ github.token }}
+
+  ci:
+    name: CI
+    if: always()
+    needs: [lint, plugin-test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check required jobs
+        env:
+          LINT_RESULT: ${{ needs.lint.result }}
+          TEST_RESULT: ${{ needs.plugin-test.result }}
+        run: |
+          test "$LINT_RESULT" = success
+          test "$TEST_RESULT" = success

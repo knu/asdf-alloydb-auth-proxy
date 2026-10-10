@@ -4,3 +4,8 @@ updates:
     directory: /
     schedule:
       interval: daily
+    labels: [dependencies, automerge]
+    groups:
+      github-actions:
+        patterns: ['*']
+        update-types: [minor, patch]
