@@ -10,6 +10,10 @@ on:
 permissions:
   contents: read
 
+defaults:
+  run:
+    shell: bash
+
 concurrency:
   group: ci-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
@@ -24,9 +28,10 @@ jobs:
           persist-credentials: false
       - name: Check shell scripts
         run: |
-          shellcheck bin/install bin/list-all
-          bash -n bin/install
-          bash -n bin/list-all
+          shellcheck bin/*
+          for script in bin/*; do
+            bash -n "$script"
+          done
 
   plugin-test:
     timeout-minutes: 15
@@ -40,13 +45,37 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      - name: asdf-plugin-test
-        uses: asdf-vm/actions/plugin-test@b7bcd026f18772e44fe1026d729e1611cc435d47 # v4.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          command: alloydb-auth-proxy --version
-          gitref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Set up asdf
+        uses: asdf-vm/actions/setup@b7bcd026f18772e44fe1026d729e1611cc435d47 # v4.0.1
+      - name: Check list-all output against release tags
+        id: versions
         env:
+          GH_TOKEN: ${{ github.token }}
           GITHUB_API_TOKEN: ${{ github.token }}
+        run: |
+          bin/list-all > "$RUNNER_TEMP/versions.txt"
+          test -s "$RUNNER_TEMP/versions.txt"
+          jq -Rs '[splits("\\s+") | select(length > 0)] | sort' \
+            "$RUNNER_TEMP/versions.txt" > "$RUNNER_TEMP/actual-versions.json"
+          gh api 'repos/GoogleCloudPlatform/alloydb-auth-proxy/releases?per_page=100' |
+            jq '[.[].tag_name | ltrimstr("v")] | sort' > "$RUNNER_TEMP/expected-versions.json"
+          diff -u "$RUNNER_TEMP/expected-versions.json" "$RUNNER_TEMP/actual-versions.json"
+          release_tag=$(gh release view --repo GoogleCloudPlatform/alloydb-auth-proxy --json tagName --jq .tagName)
+          printf 'version=%s\n' "${release_tag#v}" >> "$GITHUB_OUTPUT"
+      - name: Check installation and asdf exec
+        env:
+          VERSION: ${{ steps.versions.outputs.version }}
+        run: |
+          asdf plugin add alloydb-auth-proxy "$GITHUB_WORKSPACE"
+          asdf install alloydb-auth-proxy "$VERSION"
+          install_path=$(asdf where alloydb-auth-proxy "$VERSION")
+          test -x "$install_path/bin/alloydb-auth-proxy"
+          output=$(ASDF_ALLOYDB_AUTH_PROXY_VERSION="$VERSION" asdf exec alloydb-auth-proxy --version)
+          printf '%s\n' "$output"
+          [[ "$output" == "alloydb-auth-proxy version $VERSION+"* ]]
 
   ci:
     name: CI
